@@ -1,5 +1,6 @@
 import Pedidos from '../Models/Pedidos.js';
 import Celulares from '../Models/Celulares.js';
+import { esNumeroNoNegativo, esEnteroPositivo, idValido, correoValido } from '../utils/validaciones.js';
 
 // Generar número de orden único con prefijo SV- (ej. SV-98245)
 const generarNumeroOrden = () => {
@@ -38,6 +39,89 @@ export const crearPedido = async (req, res) => {
         success: false,
         message: 'Los totales del pedido son requeridos.',
       });
+    }
+
+    // Ningún total puede ser negativo
+    const camposTotales = ['subtotal', 'costoEnvio', 'iva', 'total'];
+    for (const campo of camposTotales) {
+      if (totales[campo] !== undefined && !esNumeroNoNegativo(totales[campo])) {
+        return res.status(400).json({
+          success: false,
+          message: `El campo ${campo} no puede ser negativo.`,
+        });
+      }
+    }
+
+    if (clienteCorreo && !correoValido(clienteCorreo)) {
+      return res.status(400).json({
+        success: false,
+        message: 'El correo del cliente no es válido.',
+      });
+    }
+
+    // ─── CONTROL DE INVENTARIO ──────────────────────────────────────────────────
+    // Se valida cada artículo ANTES de guardar: cantidad positiva y stock suficiente.
+    const cantidadesPorCelular = {};
+    for (const item of articulos) {
+      const idCelular = item.idCelular || item._id || item.id;
+      const cantidad = item.cantidad ?? item.quantity ?? 1;
+
+      if (!esEnteroPositivo(cantidad)) {
+        return res.status(400).json({
+          success: false,
+          message: 'La cantidad de cada artículo debe ser un número entero mayor a 0.',
+        });
+      }
+      if (!idCelular || !idValido(idCelular)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Cada artículo debe incluir un idCelular válido.',
+        });
+      }
+      cantidadesPorCelular[idCelular] = (cantidadesPorCelular[idCelular] || 0) + Number(cantidad);
+    }
+
+    for (const [idCelular, cantidad] of Object.entries(cantidadesPorCelular)) {
+      const celular = await Celulares.findById(idCelular);
+      if (!celular) {
+        return res.status(404).json({
+          success: false,
+          message: 'Uno de los productos del carrito ya no existe.',
+        });
+      }
+      const stockDisponible = Number(celular.stock || 0);
+      if (stockDisponible <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: `El producto "${celular.nombre}" está agotado.`,
+        });
+      }
+      if (cantidad > stockDisponible) {
+        return res.status(400).json({
+          success: false,
+          message: `Solo hay ${stockDisponible} unidad(es) disponibles de "${celular.nombre}".`,
+        });
+      }
+    }
+
+    // Descontar stock de forma atómica (solo si sigue habiendo suficiente)
+    const descontados = [];
+    for (const [idCelular, cantidad] of Object.entries(cantidadesPorCelular)) {
+      const actualizado = await Celulares.findOneAndUpdate(
+        { _id: idCelular, stock: { $gte: cantidad } },
+        { $inc: { stock: -cantidad } }
+      );
+      if (!actualizado) {
+        // Otro cliente compró al mismo tiempo: revertir lo ya descontado
+        for (const d of descontados) {
+          await Celulares.findByIdAndUpdate(d.idCelular, { $inc: { stock: d.cantidad } });
+        }
+        return res.status(400).json({
+          success: false,
+          message: 'Stock insuficiente para completar el pedido, intenta de nuevo.',
+        });
+      }
+      descontados.push({ idCelular, cantidad });
     }
 
     // ─── SEGURIDAD / CUMPLIMIENTO LEGAL (PCI-DSS) ───────────────────────────────
@@ -114,19 +198,15 @@ export const crearPedido = async (req, res) => {
       fechaOrden: new Date(),
     });
 
-    const pedidoGuardado = await nuevoPedido.save();
-
-    // Actualizar stock de celulares de forma reactiva si tienen ID
-    for (const item of articulosMapeados) {
-      if (item.idCelular) {
-        try {
-          await Celulares.findByIdAndUpdate(item.idCelular, {
-            $inc: { stock: -item.cantidad }
-          });
-        } catch (e) {
-          // Si el ID no es de Mongoose válido, se omite sin detener el flujo
-        }
+    let pedidoGuardado;
+    try {
+      pedidoGuardado = await nuevoPedido.save();
+    } catch (error) {
+      // Si el pedido no se guardó, devolver el stock descontado
+      for (const d of descontados) {
+        await Celulares.findByIdAndUpdate(d.idCelular, { $inc: { stock: d.cantidad } });
       }
+      throw error;
     }
 
     return res.status(201).json({
@@ -232,6 +312,15 @@ export const cancelarPedido = async (req, res) => {
     pedido.estadoMensaje = 'Pedido cancelado por el usuario';
     await pedido.save();
 
+    // Devolver al inventario las unidades del pedido cancelado
+    for (const item of pedido.articulos) {
+      if (item.idCelular) {
+        await Celulares.findByIdAndUpdate(item.idCelular, {
+          $inc: { stock: item.cantidad }
+        });
+      }
+    }
+
     return res.status(200).json({
       success: true,
       message: 'Pedido cancelado exitosamente.',
@@ -258,6 +347,25 @@ export const actualizarEstadoPedido = async (req, res) => {
         success: false,
         message: 'Pedido no encontrado.',
       });
+    }
+
+    const estadosValidos = ['Procesando', 'En camino', 'Entregado', 'Cancelado'];
+    if (estado && !estadosValidos.includes(estado)) {
+      return res.status(400).json({
+        success: false,
+        message: `Estado inválido. Valores permitidos: ${estadosValidos.join(', ')}.`,
+      });
+    }
+
+    // Si se cancela desde aquí, devolver el stock (solo la primera vez)
+    if (estado === 'Cancelado' && pedido.estado !== 'Cancelado') {
+      for (const item of pedido.articulos) {
+        if (item.idCelular) {
+          await Celulares.findByIdAndUpdate(item.idCelular, {
+            $inc: { stock: item.cantidad }
+          });
+        }
+      }
     }
 
     if (estado) pedido.estado = estado;

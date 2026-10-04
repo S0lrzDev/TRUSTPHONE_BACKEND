@@ -1,6 +1,6 @@
 import express from "express";
 import celularesController from "../Controllers/CelularesController.js";
-import upload from "../utils/cloudinaryConfig.js";
+import upload from "../utils/CloudinaryConfig.js";
 
 const router = express.Router();
 

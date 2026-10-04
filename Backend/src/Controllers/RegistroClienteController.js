@@ -6,6 +6,7 @@ import bcryptjs from "bcryptjs";
 
 import ClienteModel from "../Models/Clientes.js";
 import { config } from "../../config.js";
+import { camposVacios, correoValido, validarEdad, telefonoValido } from "../utils/validaciones.js";
 
 const RegistroClienteController = {};
 
@@ -23,6 +24,48 @@ RegistroClienteController.registerCliente = async (req, res) => {
             loginAttemps,
             timeOut
         } = req.body;
+
+        const fechaNacimiento = req.body.fechaNacimiento || req.body.fecha_nacimiento;
+
+        // Validar campos vacíos
+        const faltantes = camposVacios(
+            { nombre, Apellido, correo, contrasena, telefono, fechaNacimiento },
+            ["nombre", "Apellido", "correo", "contrasena", "telefono", "fechaNacimiento"]
+        );
+        if (faltantes.length > 0) {
+            return res.status(400).json({
+                message: "Faltan campos obligatorios: " + faltantes.join(", ")
+            });
+        }
+
+        // Validar formato de correo
+        if (!correoValido(correo)) {
+            return res.status(400).json({
+                message: "El formato del correo electrónico no es válido"
+            });
+        }
+
+        // Validar edad
+        const errorEdad = validarEdad(fechaNacimiento);
+        if (errorEdad) {
+            return res.status(400).json({
+                message: errorEdad
+            });
+        }
+
+        // Validar teléfono
+        if (!telefonoValido(telefono)) {
+            return res.status(400).json({
+                message: "El teléfono debe tener entre 8 y 15 dígitos"
+            });
+        }
+
+        // Validar contraseña
+        if (String(contrasena).length < 8) {
+            return res.status(400).json({
+                message: "La contraseña debe tener al menos 8 caracteres"
+            });
+        }
 
         // Verificar si el correo ya existe
         const existCliente = await ClienteModel.findOne({ correo });
@@ -57,6 +100,7 @@ RegistroClienteController.registerCliente = async (req, res) => {
                 contrasena: passwordHash,
                 telefono,
                 estado,
+                fechaNacimiento,
                 fotoPerfil,
                 public_id,
                 isVerified: false,
@@ -145,6 +189,7 @@ RegistroClienteController.verifyCode = async (req, res) => {
             contrasena,
             telefono,
             estado,
+            fechaNacimiento,
             fotoPerfil,
             public_id,
             loginAttemps,
@@ -177,6 +222,8 @@ RegistroClienteController.verifyCode = async (req, res) => {
             contrasena,
             telefono,
             estado,
+            fechaNacimiento,
+            fecha_nacimiento: fechaNacimiento,
             fotoPerfil,
             public_id,
             isVerified: true,

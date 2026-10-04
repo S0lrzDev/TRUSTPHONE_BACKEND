@@ -16,6 +16,7 @@ import RevisionCelularesRoutes from "./src/Routes/RevisionCelulares.js";
 import PedidosRoutes from "./src/Routes/Pedidos.js";
 import DireccionesRoutes from "./src/Routes/Direcciones.js";
 import MetodosPagoRoutes from "./src/Routes/MetodosPago.js";
+import ResenasRoutes from "./src/Routes/Resenas.js";
 
 const app = express();
 
@@ -45,5 +46,6 @@ app.use('/api/revisionCelulares', RevisionCelularesRoutes);
 app.use('/api/pedidos', PedidosRoutes);
 app.use('/api/direcciones', DireccionesRoutes);
 app.use('/api/metodosPago', MetodosPagoRoutes);
+app.use('/api/resenas', ResenasRoutes);
 
 export default app;
