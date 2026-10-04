@@ -1,5 +1,7 @@
 import ClientesModel from "../Models/Clientes.js";
 import { v2 as cloudinary } from "cloudinary";
+import bcryptjs from "bcryptjs";
+import { correoValido, estaVacio, telefonoValido, validarEdad } from "../utils/validaciones.js";
 
 const ClientesController = {};
 
@@ -97,10 +99,58 @@ ClientesController.updateCliente = async (req, res) => {
         nombre = nombre?.trim();
         correo = correo?.trim();
 
-        if (nombre && (nombre.length < 2 || nombre.length > 50)) {
+        if (nombre !== undefined && (nombre.length < 2 || nombre.length > 50)) {
             return res.status(400).json({
                 message: "Nombre inválido"
             });
+        }
+
+        const apellidoNuevo = Apellido ?? apellido;
+        if (apellidoNuevo !== undefined && estaVacio(apellidoNuevo)) {
+            return res.status(400).json({
+                message: "El apellido no puede estar vacío"
+            });
+        }
+
+        if (correo !== undefined && !correoValido(correo)) {
+            return res.status(400).json({
+                message: "El formato del correo electrónico no es válido"
+            });
+        }
+
+        if (telefono !== undefined && !telefonoValido(telefono)) {
+            return res.status(400).json({
+                message: "El teléfono debe tener entre 8 y 15 dígitos"
+            });
+        }
+
+        const fechaNueva = fechaNacimiento ?? fecha_nacimiento;
+        if (!estaVacio(fechaNueva)) {
+            const errorEdad = validarEdad(fechaNueva);
+            if (errorEdad) {
+                return res.status(400).json({
+                    message: errorEdad
+                });
+            }
+        }
+
+        if (contrasena && String(contrasena).length < 8) {
+            return res.status(400).json({
+                message: "La contraseña debe tener al menos 8 caracteres"
+            });
+        }
+
+        // El correo no puede pertenecer a otro cliente
+        if (correo) {
+            const correoEnUso = await ClientesModel.findOne({
+                correo,
+                _id: { $ne: req.params.id }
+            });
+            if (correoEnUso) {
+                return res.status(400).json({
+                    message: "El correo ya está registrado"
+                });
+            }
         }
 
         const cliente = await ClientesModel.findById(req.params.id);
@@ -131,7 +181,7 @@ ClientesController.updateCliente = async (req, res) => {
         if (Apellido !== undefined && Apellido !== null) updateData.Apellido = Apellido;
         if (apellido !== undefined && apellido !== null && !updateData.Apellido) updateData.Apellido = apellido;
         if (correo !== undefined && correo !== null) updateData.correo = correo;
-        if (contrasena) updateData.contrasena = contrasena;
+        if (contrasena) updateData.contrasena = await bcryptjs.hash(contrasena, 10);
         if (telefono !== undefined && telefono !== null) updateData.telefono = telefono;
         if (estado !== undefined && estado !== null) updateData.estado = estado;
         if (fecha_nacimiento !== undefined && fecha_nacimiento !== null) {

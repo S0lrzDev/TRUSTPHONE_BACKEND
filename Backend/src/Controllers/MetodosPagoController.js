@@ -1,4 +1,5 @@
 import MetodosPagoModel from '../Models/MetodosPago.js';
+import { estaVacio } from '../utils/validaciones.js';
 
 const MetodosPagoController = {};
 
@@ -19,6 +20,32 @@ MetodosPagoController.crearMetodoPago = async (req, res) => {
     if (!cliente || !titular || !ultimos4 || !fechaExpiracion) {
       return res.status(400).json({
         message: 'Faltan campos obligatorios (cliente, titular, ultimos4, fechaExpiracion).',
+      });
+    }
+
+    if (estaVacio(titular)) {
+      return res.status(400).json({
+        message: 'El titular no puede estar vacío.',
+      });
+    }
+
+    if (!/^\d{4}$/.test(String(ultimos4).slice(-4))) {
+      return res.status(400).json({
+        message: 'Los últimos 4 dígitos de la tarjeta deben ser numéricos.',
+      });
+    }
+
+    // Fecha MM/AA y que no esté vencida
+    const exp = String(fechaExpiracion).trim().match(/^(0[1-9]|1[0-2])\/(\d{2})$/);
+    if (!exp) {
+      return res.status(400).json({
+        message: 'La fecha de expiración debe tener el formato MM/AA.',
+      });
+    }
+    const finDeMes = new Date(2000 + Number(exp[2]), Number(exp[1]), 0, 23, 59, 59);
+    if (finDeMes < new Date()) {
+      return res.status(400).json({
+        message: 'La tarjeta está vencida.',
       });
     }
 

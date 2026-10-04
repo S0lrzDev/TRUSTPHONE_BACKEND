@@ -1,4 +1,5 @@
 import DireccionesModel from "../Models/Direcciones.js";
+import { camposVacios, idValido, telefonoValido } from "../utils/validaciones.js";
 
 const DireccionesController = {};
 
@@ -22,6 +23,25 @@ DireccionesController.crearDireccion = async (req, res) => {
         if (!cliente || !nombreDestinatario || !telefono || !direccion || !ciudad || !departamento) {
             return res.status(400).json({
                 message: "Faltan campos obligatorios (cliente, nombreDestinatario, telefono, direccion, ciudad, departamento)."
+            });
+        }
+
+        const vacios = camposVacios(req.body, ["nombreDestinatario", "telefono", "direccion", "ciudad", "departamento"]);
+        if (vacios.length > 0) {
+            return res.status(400).json({
+                message: "Los siguientes campos no pueden estar vacíos: " + vacios.join(", ")
+            });
+        }
+
+        if (!idValido(cliente)) {
+            return res.status(400).json({
+                message: "ID de cliente inválido"
+            });
+        }
+
+        if (!telefonoValido(telefono)) {
+            return res.status(400).json({
+                message: "El teléfono debe tener entre 8 y 15 dígitos"
             });
         }
 

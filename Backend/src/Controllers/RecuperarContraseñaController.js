@@ -6,6 +6,7 @@ import HTMLRecuperarCorreo from "../utils/enviarCorreoRecuperacion.js"
 
 import { config } from "../../config.js"
 import ClienteModel from "../Models/Clientes.js"
+import { estaVacio, correoValido } from "../utils/validaciones.js"
 
 const RecuperarContraseñaController = {}
 
@@ -13,10 +14,18 @@ RecuperarContraseñaController.requestCode = async (req, res) =>{
     try {
         const {correo} = req.body
 
+        if (estaVacio(correo)) {
+            return res.status(400).json({message: "Debe ingresar su correo"})
+        }
+
+        if (!correoValido(correo)) {
+            return res.status(400).json({message: "El formato del correo electrónico no es válido"})
+        }
+
         const userFound  = await ClienteModel.findOne({ correo })
 
         if (!userFound) {
-            return res.json({message: "Usuario no encontrado"})
+            return res.status(404).json({message: "Usuario no encontrado"})
         }
 
         const code = crypto.randomBytes(3).toString("hex")
@@ -37,7 +46,7 @@ RecuperarContraseñaController.requestCode = async (req, res) =>{
             return res.status(500).json({message: "error al enviar el correo"})
         }
 
-        return res.status(200).json({ message: "Correo Enviado"})
+        return res.status(200).json({ message: "Correo Enviado", token})
 
     } catch (error) {
         console.log("error" + error)
@@ -49,10 +58,17 @@ RecuperarContraseñaController.verifyCode = async(req, res) => {
     try {
         const {codeRequest} = req.body
 
-        const token = req.cookies.recoveryCookie
+        if (estaVacio(codeRequest)) {
+            return res.status(400).json({message: "Debe ingresar el código"})
+        }
+
+        const token = req.cookies?.recoveryCookie || req.body?.token
+        if (!token) {
+            return res.status(400).json({message: "No se encontró el token de recuperación"})
+        }
         const decoded = jsonwebtoken.verify(token, config.JWT.secret)
 
-        if (codeRequest !== decoded.code) {
+        if (String(codeRequest).trim().toLowerCase() !== decoded.code) {
             return res.status(400).json({message: "Invalid Code"})
         }
 
@@ -65,7 +81,7 @@ RecuperarContraseñaController.verifyCode = async(req, res) => {
 
         res.cookie("recoveryCookie", newToken, {maxAge: 15 * 60 * 1000})
 
-        return res.status(200).json({message: "Codigo Verificado Correctamente"})
+        return res.status(200).json({message: "Codigo Verificado Correctamente", token: newToken})
     } catch (error) {
         console.log("error" + error)
         return res.status(500).json({message: "Error Interno Del Servidor"})
@@ -74,13 +90,25 @@ RecuperarContraseñaController.verifyCode = async(req, res) => {
 
 RecuperarContraseñaController.newPassword = async (req, res) => {
     try {
-        const {newPassword, confirNewPassword} = req.body;
+        const {newPassword} = req.body;
+        const confirNewPassword = req.body.confirNewPassword ?? req.body.confirmNewPassword;
+
+        if (estaVacio(newPassword) || estaVacio(confirNewPassword)) {
+            return res.status(400).json({message: "Debe completar ambos campos de contraseña"})
+        }
+
+        if (String(newPassword).length < 8) {
+            return res.status(400).json({message: "La contraseña debe tener al menos 8 caracteres"})
+        }
 
         if (newPassword !== confirNewPassword) {
             return res.status(400).json({message: "Las Contraseñas No Coinciden"})
         }
 
-        const token = req.cookies.recoveryCookie;
+        const token = req.cookies?.recoveryCookie || req.body?.token;
+        if (!token) {
+            return res.status(400).json({message: "No se encontró el token de recuperación"})
+        }
         const decoded = jsonwebtoken.verify(token, config.JWT.secret)
 
         if (!decoded.verified) {

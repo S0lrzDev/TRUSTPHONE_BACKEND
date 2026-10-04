@@ -1,6 +1,18 @@
 import celularesModel from "../Models/Celulares.js";
 import { v2 as cloudinary } from "cloudinary";
 import { config } from "../../config.js";
+import { camposVacios, esNumeroNoNegativo, estaVacio, idValido } from "../utils/validaciones.js";
+
+// Valida precio y stock (no negativos). Devuelve mensaje de error o null
+const validarNumeros = ({ precio, stock }) => {
+  if (!estaVacio(precio) && !esNumeroNoNegativo(precio)) {
+    return "El precio debe ser un número mayor o igual a 0";
+  }
+  if (!estaVacio(stock) && (!esNumeroNoNegativo(stock) || !Number.isInteger(Number(stock)))) {
+    return "El stock debe ser un número entero mayor o igual a 0";
+  }
+  return null;
+};
 
 const CelularesController = {};
 
@@ -33,6 +45,22 @@ CelularesController.insertCelular = async (req, res) => {
       descripcion,
       estado,
     } = req.body;
+
+    const faltantes = camposVacios(req.body, ["nombre", "idMarca", "modelo", "precio", "stock"]);
+    if (faltantes.length > 0) {
+      return res.status(400).json({
+        message: "Faltan campos obligatorios: " + faltantes.join(", "),
+      });
+    }
+
+    if (!idValido(idMarca)) {
+      return res.status(400).json({ message: "Marca inválida" });
+    }
+
+    const errorNumeros = validarNumeros({ precio, stock });
+    if (errorNumeros) {
+      return res.status(400).json({ message: errorNumeros });
+    }
 
     const newCelular = new celularesModel({
       nombre,
@@ -107,6 +135,15 @@ CelularesController.updateCelular = async (req, res) => {
       descripcion,
       estado,
     } = req.body;
+
+    const errorNumeros = validarNumeros({ precio, stock });
+    if (errorNumeros) {
+      return res.status(400).json({ message: errorNumeros });
+    }
+
+    if (!estaVacio(idMarca) && !idValido(idMarca)) {
+      return res.status(400).json({ message: "Marca inválida" });
+    }
 
     const celularFound = await celularesModel.findById(req.params.id);
 
