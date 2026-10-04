@@ -1,4 +1,4 @@
-import nodemailer from 'nodemailer';
+import { sendEmail } from '../utils/sendMailMailjet.js';
 import crypto from 'crypto';
 import jsonwebtoken from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
@@ -57,30 +57,15 @@ RegistroUsuariosController.registerUsuario = async (req, res) => {
 
         res.cookie("VerificationToken", tokenCode, {maxAge: 15 * 60 * 1000});
 
-        const transporter = nodemailer.createTransport({
-            service: 'gmail',
-            auth:{
-                user: config.email.user_email,
-                pass: config.email.user_password,
-            },
-        });
+        try {
+            await sendEmail(email, 'Codigo de Verificacion', HTMLVerificarCorreo(verificationCode));
+        } catch (error) {
+            return res.status(500).json({ message: 'Error' });
+        }
 
-        const mailOptions = {
-            from: config.email.user_email,
-            to: email,
-            subject: 'Codigo de Verificacion',
-            html: HTMLVerificarCorreo(verificationCode)
-        };
-
-        transporter.sendMail(mailOptions, (error, info) => {
-            if (error) {
-                console.log("error" + error);
-                return res.status(500).json({ message: 'Error' });
-            }
-            res
-            .status(200)
-            .json({message: "Usuario Registrado, verifica tu correo electronico"})
-        })
+        res
+        .status(200)
+        .json({message: "Usuario Registrado, verifica tu correo electronico"})
     } catch (error) {
         console.log("error" + error);
         return res.status(500).json({ message: 'Error Interno Del Servidor' });

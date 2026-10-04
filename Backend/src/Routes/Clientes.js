@@ -8,6 +8,7 @@ router.route("/")
 .get(ClientesController.getAllClientes);
 
 router.route("/:id")
+.get(ClientesController.getClienteById)
 .delete(ClientesController.deleleteCliente)
 .put(upload.single("fotoPerfil"),ClientesController.updateCliente);
 

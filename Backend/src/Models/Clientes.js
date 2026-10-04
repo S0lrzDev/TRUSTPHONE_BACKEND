@@ -23,6 +23,12 @@ const ClientesSchema = new Schema({
         type: Date,
         default: Date.now
     },
+    fecha_nacimiento: {
+        type: String
+    },
+    fechaNacimiento: {
+        type: String
+    },
     fotoPerfil:{
         type: String
     },

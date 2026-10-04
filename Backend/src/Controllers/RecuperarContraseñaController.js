@@ -1,7 +1,8 @@
 import jsonwebtoken from "jsonwebtoken"
 import bcrypt from "bcrypt"
 import crypto from "crypto"
-import nodemailer from "nodemailer"
+import { sendEmail } from "../utils/sendMailMailjet.js"
+import HTMLRecuperarCorreo from "../utils/enviarCorreoRecuperacion.js"
 
 import { config } from "../../config.js"
 import ClienteModel from "../Models/Clientes.js"
@@ -30,30 +31,13 @@ RecuperarContraseñaController.requestCode = async (req, res) =>{
 
         res.cookie("recoveryCookie", token, {maxAge: 15* 60 * 1000})
 
-        const transport = nodemailer.createTransport({
-            service: "gmail",
-            auth: {
-                user: config.email.user_email, 
-                pass: config.email.user_password,
-            },
-        });
-
-        const mailOptions = {
-            from: config.email.user_email,
-            to: correo,
-            subject: "Correo de recuperacion",
-            text: "Usa este codigo para recuperar tu cuenta",
-            html: `<p>Usa este codigo para recuperar tu cuenta: <strong>${code}</strong></p>`
+        try {
+            await sendEmail(correo, "Correo de recuperacion", HTMLRecuperarCorreo(code), "Usa este codigo para recuperar tu cuenta: " + code)
+        } catch (error) {
+            return res.status(500).json({message: "error al enviar el correo"})
         }
 
-        transport.sendMail(mailOptions, (error, info) =>{
-            if (error) {
-                console.log("error" + error)
-                return res.status(500).json({message: "error al enviar el correo"})
-            }
-
-            return res.status(200).json({ message: "Correo Enviado"})
-        })
+        return res.status(200).json({ message: "Correo Enviado"})
 
     } catch (error) {
         console.log("error" + error)
@@ -107,7 +91,7 @@ RecuperarContraseñaController.newPassword = async (req, res) => {
 
         await ClienteModel.findOneAndUpdate(
             {correo: decoded.correo},
-            {contraseña: passwordHash},
+            {contrasena: passwordHash},
             {new: true},
         );
 

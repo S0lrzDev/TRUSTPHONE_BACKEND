@@ -8,13 +8,14 @@ const loginClienteController = {}
 
 loginClienteController.login = async (req, res) => {
     try {
-        const { correo, contraseña } = req.body;
+        const { correo, contrasena } = req.body;
 
         const userFound = await ClienteModel.findOne({ correo });
         
         if (!userFound) {
             return res.status(404).json({ message: 'Cliente no encontrado' });
         }
+
 
         // Verificar si la cuenta está verificada
         if (!userFound.isVerified) {
@@ -28,7 +29,7 @@ loginClienteController.login = async (req, res) => {
             return res.status(403).json({ message: 'Cuenta bloqueada' });
         }
 
-        const isMatch = await bcryptjs.compare(contraseña, userFound.contraseña);
+        const isMatch = await bcryptjs.compare(contrasena, userFound.contrasena);
 
         if (!isMatch) {
             userFound.loginAttemps = (userFound.loginAttemps || 0) + 1;
@@ -43,7 +44,7 @@ loginClienteController.login = async (req, res) => {
             }
 
             await userFound.save();
-            return res.status(400).json({ message: 'Contraseña incorrecta' });
+            return res.status(400).json({ message: 'contrasena incorrecta' });
         }
 
         // Reset login attempts on successful login
@@ -59,19 +60,21 @@ loginClienteController.login = async (req, res) => {
 
         res.cookie("AuthCookie", token);
 
-        // Retornar datos del usuario (sin contraseña) para evitar segunda petición
-        const userData = {
-            _id: userFound._id,
-            nombre: userFound.nombre,
-            Apellido: userFound.Apellido,
-            correo: userFound.correo,
-            telefono: userFound.telefono,
-            estado: userFound.estado,
-            fechaRegistro: userFound.fechaRegistro,
-            isVerified: userFound.isVerified
-        };
-
-        return res.status(200).json({ message: 'Login exitoso', user: userData });
+        return res.status(200).json({ 
+            message: 'Login exitoso',
+            cliente: {
+                _id: userFound._id,
+                nombre: userFound.nombre,
+                Apellido: userFound.Apellido || '',
+                apellido: userFound.Apellido || '',
+                correo: userFound.correo,
+                telefono: userFound.telefono || '',
+                fecha_nacimiento: userFound.fecha_nacimiento || userFound.fechaNacimiento || '',
+                fechaNacimiento: userFound.fecha_nacimiento || userFound.fechaNacimiento || '',
+                fotoPerfil: userFound.fotoPerfil || '',
+                isVerified: userFound.isVerified,
+            }
+        });
 
     } catch (error) {
         console.log("error" + error);

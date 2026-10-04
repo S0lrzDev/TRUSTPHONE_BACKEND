@@ -1,4 +1,5 @@
-import nodemailer from "nodemailer";
+import { sendEmail } from "../utils/sendMailMailjet.js";
+import HTMLVerificarCorreo from "../utils/enviarCorreoVerificacion.js";
 import crypto from "crypto";
 import jsonwebtoken from "jsonwebtoken";
 import bcryptjs from "bcryptjs";
@@ -76,38 +77,24 @@ RegistroClienteController.registerCliente = async (req, res) => {
         });
 
         // Configurar correo
-        const transporter = nodemailer.createTransport({
-            service: "gmail",
-            auth: {
-                user: config.email.user_email,
-                pass: config.email.user_password
-            }
-        });
-
-        const mailOptions = {
-            from: config.email.user_email,
-            to: correo,
-            subject: "Código de Verificación",
-            text:
+        try {
+            await sendEmail(
+                correo,
+                "Código de Verificación",
+                HTMLVerificarCorreo(verificationCode),
                 "Para verificar tu cuenta utiliza este código: " +
-                verificationCode +
-                ". Expira en 15 minutos."
-        };
-
-        transporter.sendMail(mailOptions, (error) => {
-
-            if (error) {
-                console.log(error);
-
-                return res.status(500).json({
-                    message: "Error al enviar el correo"
-                });
-            }
-
-            return res.status(200).json({
-                message: "Usuario registrado, verifica tu correo"
+                    verificationCode +
+                    ". Expira en 15 minutos."
+            );
+        } catch (error) {
+            return res.status(500).json({
+                message: "Error al enviar el correo"
             });
+        }
 
+        return res.status(200).json({
+            message: "Usuario registrado, verifica tu correo",
+            token: tokenCode
         });
 
     } catch (error) {
@@ -128,12 +115,22 @@ RegistroClienteController.verifyCode = async (req, res) => {
 
         const { verificationCodeRequest } = req.body;
 
-        const token = req.cookies.VerificationToken;
+        let token = req.cookies?.VerificationToken || req.body?.token;
 
         if (!token) {
             return res.status(400).json({
                 message: "No se encontró el token de verificación"
             });
+        }
+
+        if (typeof token === 'string') {
+            if (token.includes(',')) {
+                token = token.split(',')[0].trim();
+            }
+            if (token.includes(';')) {
+                token = token.split(';')[0].trim();
+            }
+            token = token.replace(/^VerificationToken=/, '').trim();
         }
 
         const decoded = jsonwebtoken.verify(
